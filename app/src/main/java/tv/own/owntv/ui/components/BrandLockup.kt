@@ -1,5 +1,6 @@
 package tv.own.owntv.ui.components
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material3.Text
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
@@ -117,13 +118,13 @@ fun Wordmark(width: Dp,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "HEEDAR",
+            text = stringResource(R.string.brand_heedar),
             color = own,
             fontSize = (width.value * 0.12f).sp,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = " TV",
+            text = stringResource(R.string.brand_tv),
             color = tv,
             fontSize = (width.value * 0.12f).sp,
             fontWeight = FontWeight.Bold
