@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<string name="brand_heedar">HEEDAR</string>
-<string name="brand_tv"> TV</string>
-    <string name="content_search_channels">Search channels\u2026</string>
+<resources>
+    <string name="brand_heedar">HEEDAR</string>
+    <string name="brand_tv">TV</string>
+    <string name="content_search_channels">Search channels…</string>
     <string name="content_search_movies">Search movies…</string>
     <string name="content_search_series">Search series…</string>
-        <string name="app_name">Heedar TV</string>
+    <string name="app_name">HEEDAR TV</string>
 </resources>
