@@ -115,7 +115,7 @@ fun Wordmark(
         painter = painterResource(
             R.drawable.file_000000006300820ab254aa1baeaaef5ea
         ),
-        contentDescription = "HEEDAR TV",
+contentDescription = stringResource(R.string.app_name),
         modifier = Modifier
             .width(width)
             .height(width * 182f / 988f)
