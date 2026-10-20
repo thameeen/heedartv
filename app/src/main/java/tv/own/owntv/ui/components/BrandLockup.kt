@@ -105,11 +105,24 @@ private val PixelPower = Color(CorePixelMark.POWER)
  * core's two vectors at [width]; its height follows the 988 × 182 drawing.
  */
 @Composable
-fun Wordmark(width: Dp, modifier: Modifier = Modifier, tv: Color = stageAccent.accent, own: Color = WordmarkCream) {
-    Box(modifier.width(width).height(width * 182f / 988f)) {
-        Image(painterResource(R.drawable.owntv_wordmark_own), null, Modifier.fillMaxSize(), colorFilter = ColorFilter.tint(own))
-        Image(painterResource(R.drawable.owntv_wordmark_tv), null, Modifier.fillMaxSize(), colorFilter = ColorFilter.tint(tv))
+fun Wordmark(
+    width: Dp,
+    modifier: Modifier = Modifier,
+    tv: Color = stageAccent.accent,
+    own: Color = WordmarkCream
+) {
+        Image(
+        painter = painterResource(
+            R.drawable.file_000000006300820ab254aa1baeaaef5ea
+        ),
+        contentDescription = "HEEDAR TV",
+        modifier = Modifier
+            .width(width)
+            .height(width * 182f / 988f)
+    )
+        )
     }
+}    }
 }
 
 val WordmarkCream = Color(0xFFFFF6EE)
