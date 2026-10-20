@@ -1,5 +1,8 @@
 package tv.own.owntv.ui.components
 
+import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -21,7 +24,6 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.compose.koinInject
 import tv.own.owntv.R
@@ -105,11 +107,29 @@ private val PixelPower = Color(CorePixelMark.POWER)
  * core's two vectors at [width]; its height follows the 988 × 182 drawing.
  */
 @Composable
-fun Wordmark(width: Dp, modifier: Modifier = Modifier, tv: Color = stageAccent.accent, own: Color = WordmarkCream) {
-    Box(modifier.width(width).height(width * 182f / 988f)) {
-        Image(painterResource(R.drawable.owntv_wordmark_own), null, Modifier.fillMaxSize(), colorFilter = ColorFilter.tint(own))
-        Image(painterResource(R.drawable.owntv_wordmark_tv), null, Modifier.fillMaxSize(), colorFilter = ColorFilter.tint(tv))
+fun Wordmark(width: Dp,
+    modifier: Modifier = Modifier,
+    tv: Color = stageAccent.accent,
+    own: Color = WordmarkCream
+) {
+    Row(
+        modifier = modifier.width(width),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "HEEDAR",
+            color = own,
+            fontSize = (width.value * 0.12f).sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = " TV",
+            color = tv,
+            fontSize = (width.value * 0.12f).sp,
+            fontWeight = FontWeight.Bold
+        )
     }
+}
 }
 
 val WordmarkCream = Color(0xFFFFF6EE)
