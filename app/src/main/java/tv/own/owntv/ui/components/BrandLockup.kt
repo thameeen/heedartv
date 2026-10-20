@@ -111,15 +111,14 @@ fun Wordmark(
     tv: Color = stageAccent.accent,
     own: Color = WordmarkCream
 ) {
-            Image(
-        painter = painterResource(
-            R.drawable.file_000000006300820ab254aa1baeaaef5ea
-        ),
-        contentDescription = "HEEDAR TV",
+    Image(
+        painter = painterResource(R.drawable.heedar_wordmark),
+        contentDescription = null,
         modifier = modifier
             .width(width)
             .height(width * 182f / 988f)
     )
+}
 
 val WordmarkCream = Color(0xFFFFF6EE)
 
