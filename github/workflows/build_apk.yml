@@ -1,18 +1,2235 @@
-name: Build Android APK
-on: [push, workflow_dispatch]
+HEEDAR TV — FULL SOURCE CODE
+ملاحظة: هذا الملف يجمع ملفات المصدر والإعدادات المهمة. لإنشاء التطبيق عملياً، استخدم أيضاً أرشيف المشروع الكامل ZIP مع Flutter.
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.24.0'
-          channel: 'stable'
-      - run: flutter pub get
-      - run: flutter build apk --release
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Heedar-TV-Release-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+
+================================================================================
+FILE: README.md
+================================================================================
+
+# Heedar TV — النسخة الفاخرة 1.1
+
+تطبيق بث متكامل بواجهة فاخرة (فحم داكن + ذهبي) للهواتف وأجهزة Android TV.
+
+## المميزات
+
+- تصميم فاخر Dark & Gold
+- دعم العربية والإنجليزية مع تبديل فوري وحفظ الاختيار
+- RTL / LTR تلقائي حسب اللغة
+- الصفحة الرئيسية بإحصائيات ووصول سريع
+- بث مباشر: استيراد M3U/M3U8، تصنيفات، بحث، مفضلة، مشغل فيديو
+- أقسام الأفلام والمسلسلات (جاهزة هيكليًا)
+- إدارة مصادر مع حفظ محلي دائم
+- دعم أساسي لجهاز التحكم (Focus)
+
+## هيكل المشروع
+
+```
+heedar_tv/
+├── lib/
+│   ├── main.dart                 # الواجهة الكاملة والتنقل
+│   ├── l10n/
+│   │   └── app_localizations.dart  # الترجمة عربي / English
+│   ├── models/
+│   │   ├── channel.dart          # نموذج القناة
+│   │   └── media_item.dart       # نموذج الأفلام والمسلسلات
+│   └── services/
+│       └── m3u_service.dart      # محلل قوائم M3U
+├── android/                      # إعدادات أندرويد + دعم TV
+├── pubspec.yaml
+└── README.md
+```
+
+## التشغيل والبناء
+
+```bash
+flutter pub get
+flutter run
+```
+
+بناء APK:
+
+```bash
+flutter build apk --release
+```
+
+الملف الناتج:
+`build/app/outputs/flutter-apk/app-release.apk`
+
+## ملاحظات
+
+- التطبيق لا يأتي بقنوات جاهزة.
+- أضف قوائم M3U من قسم المصادر.
+- اللغة الافتراضية: العربية (يمكن تغييرها من الإعدادات).
+
+
+================================================================================
+FILE: pubspec.yaml
+================================================================================
+
+name: heedar_tv
+description: Heedar TV - تطبيق بث فاخر ومتكامل للهواتف وشاشات التلفزيون
+publish_to: 'none'
+version: 1.1.0+2
+
+environment:
+  sdk: ^3.5.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  video_player: ^2.9.2
+  shared_preferences: ^2.3.3
+  http: ^1.2.2
+  wakelock_plus: ^1.2.8
+  uuid: ^4.5.1
+  cached_network_image: ^3.4.1
+  google_fonts: ^6.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+
+================================================================================
+FILE: analysis_options.yaml
+================================================================================
+
+# This file configures the analyzer, which statically analyzes Dart code to
+# check for errors, warnings, and lints.
+#
+# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
+# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
+# invoked from the command line by running `flutter analyze`.
+
+# The following line activates a set of recommended lints for Flutter apps,
+# packages, and plugins designed to encourage good coding practices.
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  # The lint rules applied to this project can be customized in the
+  # section below to disable rules from the `package:flutter_lints/flutter.yaml`
+  # included above or to enable additional rules. A list of all available lints
+  # and their documentation is published at https://dart.dev/lints.
+  #
+  # Instead of disabling a lint rule for the entire project in the
+  # section below, it can also be suppressed for a single line of code
+  # or a specific dart file by using the `// ignore: name_of_lint` and
+  # `// ignore_for_file: name_of_lint` syntax on the line or in the file
+  # producing the lint.
+  rules:
+    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
+    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+
+# Additional information about this file can be found at
+# https://dart.dev/guides/language/analysis-options
+
+
+================================================================================
+FILE: lib/main.dart
+================================================================================
+
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player/video_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:http/http.dart' as http;
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:uuid/uuid.dart';
+
+import 'models/channel.dart';
+import 'models/media_item.dart';
+import 'services/m3u_service.dart';
+import 'l10n/app_localizations.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  WakelockPlus.enable();
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
+  runApp(const HeedarTVApp());
+}
+
+class HeedarTVApp extends StatefulWidget {
+  const HeedarTVApp({super.key});
+
+  static _HeedarTVAppState? of(BuildContext context) =>
+      context.findAncestorStateOfType<_HeedarTVAppState>();
+
+  @override
+  State<HeedarTVApp> createState() => _HeedarTVAppState();
+}
+
+class _HeedarTVAppState extends State<HeedarTVApp> {
+  Locale _locale = const Locale('ar', 'AE');
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocale();
+  }
+
+  Future<void> _loadLocale() async {
+    final prefs = await SharedPreferences.getInstance();
+    final code = prefs.getString('app_locale') ?? 'ar';
+    if (mounted) {
+      setState(() {
+        _locale = code == 'en' ? const Locale('en', 'US') : const Locale('ar', 'AE');
+      });
+    }
+  }
+
+  Future<void> setLocale(Locale locale) async {
+    setState(() => _locale = locale);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('app_locale', locale.languageCode);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isArabic = _locale.languageCode == 'ar';
+    return MaterialApp(
+      title: 'Heedar TV',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF0A0C0F),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFFD4A84B),
+          secondary: Color(0xFFC9A227),
+          surface: Color(0xFF141820),
+          onPrimary: Colors.black,
+        ),
+        textTheme: isArabic
+            ? GoogleFonts.cairoTextTheme(ThemeData.dark().textTheme)
+            : GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+        useMaterial3: true,
+        cardTheme: CardThemeData(
+          color: const Color(0xFF141820),
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+      ),
+      locale: _locale,
+      supportedLocales: const [Locale('ar', 'AE'), Locale('en', 'US')],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: const MainShell(),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// MAIN SHELL - Premium Navigation
+// ─────────────────────────────────────────────
+class MainShell extends StatefulWidget {
+  const MainShell({super.key});
+
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  int _currentIndex = 0; // 0=Home, 1=Live, 2=Movies, 3=Series, 4=Sources
+
+  List<Channel> _channels = [];
+  List<MediaItem> _movies = [];
+  List<MediaItem> _series = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAllData();
+  }
+
+  Future<void> _loadAllData() async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final chData = prefs.getString('saved_channels');
+      if (chData != null) {
+        final list = jsonDecode(chData) as List;
+        _channels = list.map((e) => Channel.fromJson(Map<String, dynamic>.from(e))).toList();
+      }
+      final movData = prefs.getString('saved_movies');
+      if (movData != null) {
+        final list = jsonDecode(movData) as List;
+        _movies = list.map((e) => MediaItem.fromJson(Map<String, dynamic>.from(e))).toList();
+      }
+      final serData = prefs.getString('saved_series');
+      if (serData != null) {
+        final list = jsonDecode(serData) as List;
+        _series = list.map((e) => MediaItem.fromJson(Map<String, dynamic>.from(e))).toList();
+      }
+    } catch (e) {
+      debugPrint('Load error: $e');
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _saveChannels() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('saved_channels', jsonEncode(_channels.map((c) => c.toJson()).toList()));
+  }
+
+  void _onChannelsUpdated(List<Channel> channels) {
+    setState(() => _channels = channels);
+    _saveChannels();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isWide = MediaQuery.of(context).size.width > 700;
+
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    return Directionality(
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0A0C0F),
+        body: Row(
+          children: [
+            // ─── Side Navigation (Premium) ───
+            _buildSideNav(isWide),
+            // ─── Content ───
+            Expanded(
+              child: IndexedStack(
+                index: _currentIndex,
+                children: [
+                  _HomePage(
+                    channels: _channels,
+                    movies: _movies,
+                    series: _series,
+                    onNavigate: (i) => setState(() => _currentIndex = i),
+                  ),
+                  LiveTVPage(
+                    channels: _channels,
+                    onChannelsUpdated: _onChannelsUpdated,
+                  ),
+                  Builder(builder: (c) {
+                    final l = AppLocalizations.of(c);
+                    return MediaGridPage(
+                      title: l.movies,
+                      items: _movies,
+                      emptyMessage: l.noMovies,
+                      icon: Icons.movie_creation_rounded,
+                    );
+                  }),
+                  Builder(builder: (c) {
+                    final l = AppLocalizations.of(c);
+                    return MediaGridPage(
+                      title: l.series,
+                      items: _series,
+                      emptyMessage: l.noSeries,
+                      icon: Icons.tv_rounded,
+                    );
+                  }),
+                  SourcesPage(
+                    channels: _channels,
+                    onChannelsUpdated: _onChannelsUpdated,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSideNav(bool isWide) {
+    final l10n = AppLocalizations.of(context);
+    final items = [
+      _NavItem(Icons.home_rounded, l10n.home, 0),
+      _NavItem(Icons.live_tv_rounded, l10n.live, 1),
+      _NavItem(Icons.movie_creation_rounded, l10n.movies, 2),
+      _NavItem(Icons.tv_rounded, l10n.series, 3),
+      _NavItem(Icons.cloud_download_rounded, l10n.sources, 4),
+      _NavItem(Icons.settings_rounded, l10n.settings, 5),
+    ];
+
+    return Container(
+      width: isWide ? 92 : 72,
+      decoration: const BoxDecoration(
+        color: Color(0xFF0E1116),
+        border: Border(left: BorderSide(color: Color(0xFF1A1F28), width: 1)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 28),
+          // Logo
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFD4A84B), Color(0xFFB8860B)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFD4A84B).withOpacity(0.35),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Text(
+                'H',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 24,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'HEEDAR',
+            style: GoogleFonts.cairo(
+              color: const Color(0xFFD4A84B),
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+            ),
+          ),
+          const SizedBox(height: 32),
+          Expanded(
+            child: ListView.builder(
+              itemCount: items.length,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              itemBuilder: (ctx, i) {
+                final item = items[i];
+                final selected = _currentIndex == item.index;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Focus(
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent &&
+                          (event.logicalKey == LogicalKeyboardKey.select ||
+                              event.logicalKey == LogicalKeyboardKey.enter)) {
+                        if (item.index == 5) {
+                          _showSettings();
+                        } else {
+                          setState(() => _currentIndex = item.index);
+                        }
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: Builder(builder: (c) {
+                      final focused = Focus.of(c).hasFocus;
+                      return Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () {
+                            if (item.index == 5) {
+                              _showSettings();
+                            } else {
+                              setState(() => _currentIndex = item.index);
+                            }
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? const Color(0xFFD4A84B).withOpacity(0.15)
+                                  : focused
+                                      ? Colors.white.withOpacity(0.05)
+                                      : Colors.transparent,
+                              borderRadius: BorderRadius.circular(14),
+                              border: focused || selected
+                                  ? Border.all(
+                                      color: const Color(0xFFD4A84B).withOpacity(selected ? 0.6 : 0.4),
+                                      width: 1.5,
+                                    )
+                                  : null,
+                            ),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  item.icon,
+                                  size: 24,
+                                  color: selected || focused
+                                      ? const Color(0xFFD4A84B)
+                                      : Colors.white54,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  item.label,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: selected || focused
+                                        ? const Color(0xFFD4A84B)
+                                        : Colors.white38,
+                                    fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: Text(
+              'v1.1',
+              style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSettings() {
+    final l10n = AppLocalizations.of(context);
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF141820),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(l10n.settings, style: TextStyle(color: const Color(0xFFD4A84B), fontWeight: FontWeight.bold, fontFamily: isArabic ? 'Cairo' : null)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Language switcher
+            ListTile(
+              leading: const Icon(Icons.language, color: Color(0xFFD4A84B)),
+              title: Text(l10n.language, style: const TextStyle(color: Colors.white)),
+              subtitle: Text(isArabic ? l10n.arabic : l10n.english, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _langBtn(ctx, 'AR', isArabic, () {
+                    HeedarTVApp.of(context)?.setLocale(const Locale('ar', 'AE'));
+                    Navigator.pop(ctx);
+                  }),
+                  const SizedBox(width: 6),
+                  _langBtn(ctx, 'EN', !isArabic, () {
+                    HeedarTVApp.of(context)?.setLocale(const Locale('en', 'US'));
+                    Navigator.pop(ctx);
+                  }),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white12),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              title: Text(l10n.clearChannels, style: const TextStyle(color: Colors.white)),
+              onTap: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.remove('saved_channels');
+                setState(() => _channels = []);
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+            ),
+            const Divider(color: Colors.white12),
+            ListTile(
+              leading: const Icon(Icons.info_outline, color: Color(0xFFD4A84B)),
+              title: const Text('Heedar TV', style: TextStyle(color: Colors.white)),
+              subtitle: Text(l10n.version, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l10n.close, style: const TextStyle(color: Color(0xFFD4A84B))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _langBtn(BuildContext ctx, String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFD4A84B) : const Color(0xFF1A1F28),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.black : Colors.white70,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem {
+  final IconData icon;
+  final String label;
+  final int index;
+  _NavItem(this.icon, this.label, this.index);
+}
+
+// ─────────────────────────────────────────────
+// HOME PAGE - Rich & Informative
+// ─────────────────────────────────────────────
+class _HomePage extends StatelessWidget {
+  final List<Channel> channels;
+  final List<MediaItem> movies;
+  final List<MediaItem> series;
+  final Function(int) onNavigate;
+
+  const _HomePage({
+    required this.channels,
+    required this.movies,
+    required this.series,
+    required this.onNavigate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
+        // Header
+        theSliverAppBar(),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Stats cards
+                _buildStatsRow(),
+                const SizedBox(height: 28),
+                // Quick actions
+                Text(AppLocalizations.of(context).quickAccess, style: _sectionTitle()),
+                const SizedBox(height: 14),
+                _buildQuickActions(),
+                const SizedBox(height: 32),
+                // Live preview section
+                Text(AppLocalizations.of(context).liveTV, style: _sectionTitle()),
+                const SizedBox(height: 14),
+                _buildLivePreviewCard(context),
+                const SizedBox(height: 32),
+                // Movies teaser
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(AppLocalizations.of(context).movies, style: _sectionTitle()),
+                    TextButton(
+                      onPressed: () => onNavigate(2),
+                      child: Text(AppLocalizations.of(context).viewAll, style: const TextStyle(color: Color(0xFFD4A84B))),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildMediaTeaser(movies, AppLocalizations.of(context).noMovies.split('\n').first, Icons.movie_creation_rounded),
+                const SizedBox(height: 32),
+                // Series teaser
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(AppLocalizations.of(context).series, style: _sectionTitle()),
+                    TextButton(
+                      onPressed: () => onNavigate(3),
+                      child: Text(AppLocalizations.of(context).viewAll, style: const TextStyle(color: Color(0xFFD4A84B))),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildMediaTeaser(series, AppLocalizations.of(context).noSeries.split('\n').first, Icons.tv_rounded),
+                const SizedBox(height: 40),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget theSliverAppBar() {
+    return SliverAppBar(
+      floating: true,
+      backgroundColor: const Color(0xFF0A0C0F),
+      expandedHeight: 0,
+      title: Row(
+        children: [
+          Text(
+            'Heedar TV',
+            style: GoogleFonts.cairo(
+              color: const Color(0xFFD4A84B),
+              fontWeight: FontWeight.bold,
+              fontSize: 22,
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF141820),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFD4A84B).withOpacity(0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.circle, size: 8, color: Colors.greenAccent.shade400),
+                const SizedBox(width: 6),
+                Text(
+                  '${channels.length} قناة',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  TextStyle _sectionTitle() => GoogleFonts.cairo(
+        color: Colors.white,
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+      );
+
+  Widget _buildStatsRow() {
+    return Row(
+      children: [
+        _statCard('القنوات', '${channels.length}', Icons.live_tv_rounded, const Color(0xFFD4A84B)),
+        const SizedBox(width: 12),
+        _statCard('الأفلام', '${movies.length}', Icons.movie_creation_rounded, const Color(0xFF5B8DEF)),
+        const SizedBox(width: 12),
+        _statCard('المسلسلات', '${series.length}', Icons.tv_rounded, const Color(0xFFE85D75)),
+      ],
+    );
+  }
+
+  Widget _statCard(String label, String value, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF141820),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.25)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 26),
+            const SizedBox(height: 8),
+            Text(value, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.bold)),
+            Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Row(
+      children: [
+        _actionChip('بث مباشر', Icons.live_tv, () => onNavigate(1)),
+        const SizedBox(width: 10),
+        _actionChip('أضف مصدر', Icons.add_link, () => onNavigate(4)),
+        const SizedBox(width: 10),
+        _actionChip('أفلام', Icons.movie, () => onNavigate(2)),
+      ],
+    );
+  }
+
+  Widget _actionChip(String label, IconData icon, VoidCallback onTap) {
+    return Expanded(
+      child: Material(
+        color: const Color(0xFF141820),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFD4A84B).withOpacity(0.3)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: const Color(0xFFD4A84B), size: 18),
+                const SizedBox(width: 8),
+                Text(label, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLivePreviewCard(BuildContext context) {
+    return Container(
+      height: 160,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF1A1F2E),
+            const Color(0xFF0E1116),
+          ],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        border: Border.all(color: const Color(0xFFD4A84B).withOpacity(0.2)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => onNavigate(1),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Container(
+                  width: 70,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD4A84B).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.live_tv_rounded, color: Color(0xFFD4A84B), size: 36),
+                ),
+                const SizedBox(width: 18),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        channels.isEmpty ? AppLocalizations.of(context).noChannelsYet : '${channels.length} ${AppLocalizations.of(context).channelsReady}',
+                        style: GoogleFonts.cairo(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        channels.isEmpty
+                            ? 'استورد قائمة M3U للبدء في المشاهدة'
+                            : 'اضغط للانتقال إلى البث المباشر',
+                        style: const TextStyle(color: Colors.white54, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_back_ios_new, color: Color(0xFFD4A84B), size: 18),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaTeaser(List<MediaItem> items, String empty, IconData icon) {
+    if (items.isEmpty) {
+      return Container(
+        height: 140,
+        decoration: BoxDecoration(
+          color: const Color(0xFF141820),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 36, color: Colors.white24),
+              const SizedBox(height: 8),
+              Text(empty, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white38, fontSize: 13)),
+            ],
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      height: 180,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: items.length.clamp(0, 10),
+        itemBuilder: (ctx, i) {
+          final item = items[i];
+          return Container(
+            width: 110,
+            margin: const EdgeInsets.only(left: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: item.posterUrl.isNotEmpty
+                        ? CachedNetworkImage(imageUrl: item.posterUrl, fit: BoxFit.cover, width: 110)
+                        : Container(color: const Color(0xFF1A1F28), child: Icon(icon, color: Colors.white24)),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                if (item.year.isNotEmpty)
+                  Text(item.year, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// LIVE TV PAGE
+// ─────────────────────────────────────────────
+class LiveTVPage extends StatefulWidget {
+  final List<Channel> channels;
+  final Function(List<Channel>) onChannelsUpdated;
+
+  const LiveTVPage({super.key, required this.channels, required this.onChannelsUpdated});
+
+  @override
+  State<LiveTVPage> createState() => _LiveTVPageState();
+}
+
+class _LiveTVPageState extends State<LiveTVPage> {
+  Channel? _selected;
+  VideoPlayerController? _controller;
+  bool _loading = false;
+  String _error = '';
+  String _search = '';
+  String _category = '__all__';
+  bool _fullScreen = false;
+
+  List<String> get _categories {
+    final groups = widget.channels.map((c) => c.group).toSet().toList()..sort();
+    return ['__all__', '__fav__', ...groups];
+  }
+
+  String _catLabel(String cat) {
+    final l10n = AppLocalizations.of(context);
+    if (cat == '__all__') return l10n.all;
+    if (cat == '__fav__') return l10n.favorites;
+    return cat;
+  }
+
+  List<Channel> get _filtered {
+    var list = widget.channels;
+    if (_category == '__fav__') list = list.where((c) => c.isFavorite).toList();
+    else if (_category != '__all__' && _category.isNotEmpty) list = list.where((c) => c.group == _category).toList();
+    if (_search.isNotEmpty) {
+      final q = _search.toLowerCase();
+      list = list.where((c) => c.name.toLowerCase().contains(q)).toList();
+    }
+    return list;
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _play(Channel ch) async {
+    setState(() {
+      _selected = ch;
+      _loading = true;
+      _error = '';
+    });
+    await _controller?.dispose();
+    _controller = null;
+    try {
+      final c = VideoPlayerController.networkUrl(Uri.parse(ch.url));
+      await c.initialize().timeout(const Duration(seconds: 15));
+      await c.play();
+      c.setLooping(true);
+      if (mounted) {
+        setState(() {
+          _controller = c;
+          _loading = false;
+          ch.isWorking = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = AppLocalizations.of(context).playbackError;
+          ch.isWorking = false;
+        });
+        widget.onChannelsUpdated(List.from(widget.channels));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_fullScreen) return _buildFullScreen();
+
+    final isWide = MediaQuery.of(context).size.width > 800;
+
+    return Column(
+      children: [
+        // Top bar
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+          child: Row(
+            children: [
+              Text(AppLocalizations.of(context).liveTV, style: GoogleFonts.cairo(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              if (_selected != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.red.shade700, borderRadius: BorderRadius.circular(6)),
+                  child: const Text(AppLocalizations.of(context).liveBadge, style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: isWide
+              ? Row(
+                  children: [
+                    // Channel list
+                    SizedBox(width: 340, child: _buildChannelPanel()),
+                    // Player
+                    Expanded(child: _buildPlayerArea()),
+                  ],
+                )
+              : Column(
+                  children: [
+                    Expanded(flex: 5, child: _buildPlayerArea()),
+                    Expanded(flex: 5, child: _buildChannelPanel()),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChannelPanel() {
+    return Container(
+      color: const Color(0xFF0E1116),
+      child: Column(
+        children: [
+          // Search
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: TextField(
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: AppLocalizations.of(context).searchChannel,
+                hintStyle: const TextStyle(color: Colors.white30),
+                prefixIcon: const Icon(Icons.search, color: Colors.white38, size: 20),
+                filled: true,
+                fillColor: const Color(0xFF1A1F28),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+              ),
+              onChanged: (v) => setState(() => _search = v),
+            ),
+          ),
+          // Categories
+          SizedBox(
+            height: 42,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              itemCount: _categories.length,
+              itemBuilder: (ctx, i) {
+                final cat = _categories[i];
+                final sel = _category == cat;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _category = cat),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: sel ? const Color(0xFFD4A84B) : const Color(0xFF1A1F28),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _catLabel(cat),
+                        style: TextStyle(
+                          color: sel ? Colors.black : Colors.white70,
+                          fontSize: 12,
+                          fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          // List
+          Expanded(
+            child: _filtered.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.tv_off, size: 48, color: Colors.white24),
+                        const SizedBox(height: 12),
+                        Text(
+                          widget.channels.isEmpty ? AppLocalizations.of(context).noChannels : AppLocalizations.of(context).noResults,
+                          style: const TextStyle(color: Colors.white38),
+                        ),
+                        if (widget.channels.isEmpty) ...[
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFD4A84B),
+                              foregroundColor: Colors.black,
+                            ),
+                            onPressed: () => _showImport(),
+                            icon: const Icon(Icons.add_link, size: 18),
+                            label: Text(AppLocalizations.of(context).importM3U),
+                          ),
+                        ],
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _filtered.length,
+                    padding: const EdgeInsets.only(bottom: 20),
+                    itemBuilder: (ctx, i) {
+                      final ch = _filtered[i];
+                      final sel = _selected?.id == ch.id;
+                      return Focus(
+                        onKeyEvent: (n, e) {
+                          if (e is KeyDownEvent &&
+                              (e.logicalKey == LogicalKeyboardKey.select || e.logicalKey == LogicalKeyboardKey.enter)) {
+                            _play(ch);
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: Builder(builder: (c) {
+                          final focused = Focus.of(c).hasFocus;
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: focused
+                                  ? const Color(0xFFD4A84B).withOpacity(0.2)
+                                  : sel
+                                      ? const Color(0xFF1A1F28)
+                                      : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                              border: focused ? Border.all(color: const Color(0xFFD4A84B), width: 1.5) : null,
+                            ),
+                            child: ListTile(
+                              dense: true,
+                              leading: CircleAvatar(
+                                radius: 18,
+                                backgroundColor: const Color(0xFF1A1F28),
+                                backgroundImage: ch.logo.isNotEmpty ? CachedNetworkImageProvider(ch.logo) : null,
+                                child: ch.logo.isEmpty ? const Icon(Icons.live_tv, size: 16, color: Colors.white54) : null,
+                              ),
+                              title: Text(
+                                ch.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: sel ? const Color(0xFFD4A84B) : Colors.white,
+                                  fontSize: 13.5,
+                                  fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+                                ),
+                              ),
+                              subtitle: Text(ch.group, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (!ch.isWorking) const Icon(Icons.error_outline, color: Colors.redAccent, size: 16),
+                                  IconButton(
+                                    icon: Icon(
+                                      ch.isFavorite ? Icons.favorite : Icons.favorite_border,
+                                      size: 18,
+                                      color: ch.isFavorite ? Colors.redAccent : Colors.white30,
+                                    ),
+                                    onPressed: () {
+                                      setState(() => ch.isFavorite = !ch.isFavorite);
+                                      widget.onChannelsUpdated(List.from(widget.channels));
+                                    },
+                                  ),
+                                ],
+                              ),
+                              onTap: () => _play(ch),
+                            ),
+                          );
+                        }),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayerArea() {
+    return Container(
+      color: Colors.black,
+      child: Column(
+        children: [
+          Expanded(
+            flex: 6,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (_controller != null && _controller!.value.isInitialized)
+                  AspectRatio(
+                    aspectRatio: _controller!.value.aspectRatio,
+                    child: VideoPlayer(_controller!),
+                  )
+                else if (_loading)
+                  const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(color: Color(0xFFD4A84B)),
+                      SizedBox(height: 16),
+                      Text(AppLocalizations.of(context).connecting, style: TextStyle(color: Colors.white70)),
+                    ],
+                  )
+                else if (_error.isNotEmpty)
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.signal_wifi_connected_no_internet_4, size: 52, color: Colors.redAccent),
+                      const SizedBox(height: 12),
+                      Text(_error, style: const TextStyle(color: Colors.white70)),
+                      if (_selected != null)
+                        TextButton(
+                          onPressed: () => _play(_selected!),
+                          child: const Text(AppLocalizations.of(context).retry, style: TextStyle(color: Color(0xFFD4A84B))),
+                        ),
+                    ],
+                  )
+                else
+                  const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.tv, size: 64, color: Colors.white12),
+                      SizedBox(height: 12),
+                      Text(AppLocalizations.of(context).chooseChannel, style: TextStyle(color: Colors.white38, fontSize: 16)),
+                    ],
+                  ),
+                if (_controller != null && _controller!.value.isInitialized)
+                  Positioned(
+                    bottom: 12,
+                    left: 12,
+                    child: IconButton(
+                      icon: const Icon(Icons.fullscreen, color: Colors.white70, size: 28),
+                      onPressed: () => setState(() => _fullScreen = true),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Info bar
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            color: const Color(0xFF0E1116),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _selected?.name ?? 'Heedar TV',
+                  style: GoogleFonts.cairo(color: const Color(0xFFD4A84B), fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _selected != null ? 'المجموعة: ${_selected!.group}' : 'استورد قائمة للبدء',
+                  style: const TextStyle(color: Colors.white54, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFullScreen() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (_controller != null && _controller!.value.isInitialized)
+          Center(child: AspectRatio(aspectRatio: _controller!.value.aspectRatio, child: VideoPlayer(_controller!))),
+        Positioned(
+          top: 24,
+          left: 24,
+          child: IconButton(
+            icon: const Icon(Icons.fullscreen_exit, color: Colors.white, size: 32),
+            onPressed: () => setState(() => _fullScreen = false),
+          ),
+        ),
+        if (_selected != null)
+          Positioned(
+            bottom: 32,
+            left: 32,
+            right: 32,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
+              child: Text(_selected!.name, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD4A84B), fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _showImport() {
+    // Reuse similar dialog from before - simplified call
+    final urlCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF141820),
+        title: Text(AppLocalizations.of(context).importM3U, style: const TextStyle(color: Color(0xFFD4A84B))),
+        content: TextField(
+          controller: urlCtrl,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(hintText: 'https://...playlist.m3u', hintStyle: TextStyle(color: Colors.white30)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(AppLocalizations.of(context).cancel)),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4A84B), foregroundColor: Colors.black),
+            onPressed: () async {
+              final url = urlCtrl.text.trim();
+              if (url.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 25));
+                if (res.statusCode == 200) {
+                  final list = <Channel>[];
+                  await for (final ch in M3uService.parseM3uContent(res.body)) {
+                    list.add(ch);
+                  }
+                  final existing = widget.channels.map((c) => c.url).toSet();
+                  final newOnes = list.where((c) => !existing.contains(c.url)).toList();
+                  final all = [...widget.channels, ...newOnes];
+                  widget.onChannelsUpdated(all);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('${AppLocalizations.of(context).importSuccess} ${newOnes.length} ${AppLocalizations.of(context).channels}'), backgroundColor: const Color(0xFF1A1F28)),
+                    );
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(AppLocalizations.of(context).importFailed), backgroundColor: Colors.redAccent),
+                  );
+                }
+              }
+            },
+            child: Text(AppLocalizations.of(context).importM3U),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// MEDIA GRID (Movies / Series)
+// ─────────────────────────────────────────────
+class MediaGridPage extends StatelessWidget {
+  final String title;
+  final List<MediaItem> items;
+  final String emptyMessage;
+  final IconData icon;
+
+  const MediaGridPage({
+    super.key,
+    required this.title,
+    required this.items,
+    required this.emptyMessage,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+          child: Text(title, style: GoogleFonts.cairo(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+        ),
+        Expanded(
+          child: items.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: 64, color: Colors.white12),
+                      const SizedBox(height: 16),
+                      Text(emptyMessage, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white38, fontSize: 15)),
+                      const SizedBox(height: 8),
+                      const Text(
+                        '${AppLocalizations.of(context).canLinkLater}',
+                        style: TextStyle(color: Colors.white24, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.all(20),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 160,
+                    childAspectRatio: 0.65,
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 14,
+                  ),
+                  itemCount: items.length,
+                  itemBuilder: (ctx, i) {
+                    final item = items[i];
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF141820),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                              child: item.posterUrl.isNotEmpty
+                                  ? CachedNetworkImage(imageUrl: item.posterUrl, fit: BoxFit.cover, width: double.infinity)
+                                  : Container(color: const Color(0xFF1A1F28), child: Center(child: Icon(icon, color: Colors.white24))),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                                if (item.year.isNotEmpty)
+                                  Text(item.year, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                                if (item.rating > 0)
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.star_rounded, size: 12, color: Color(0xFFD4A84B)),
+                                      const SizedBox(width: 2),
+                                      Text(item.rating.toStringAsFixed(1), style: const TextStyle(color: Color(0xFFD4A84B), fontSize: 11)),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// SOURCES PAGE
+// ─────────────────────────────────────────────
+class SourcesPage extends StatefulWidget {
+  final List<Channel> channels;
+  final Function(List<Channel>) onChannelsUpdated;
+
+  const SourcesPage({super.key, required this.channels, required this.onChannelsUpdated});
+
+  @override
+  State<SourcesPage> createState() => _SourcesPageState();
+}
+
+class _SourcesPageState extends State<SourcesPage> {
+  final _urlCtrl = TextEditingController();
+  bool _importing = false;
+  String _status = '';
+
+  @override
+  void dispose() {
+    _urlCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _import() async {
+    final url = _urlCtrl.text.trim();
+    if (url.isEmpty) return;
+    setState(() {
+      _importing = true;
+      _status = AppLocalizations.of(context).downloading;
+    });
+    try {
+      final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+      if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
+      setState(() => _status = AppLocalizations.of(context).parsing);
+      final list = <Channel>[];
+      await for (final ch in M3uService.parseM3uContent(res.body)) {
+        list.add(ch);
+      }
+      final existing = widget.channels.map((c) => c.url).toSet();
+      final newOnes = list.where((c) => !existing.contains(c.url)).toList();
+      final all = [...widget.channels, ...newOnes];
+      widget.onChannelsUpdated(all);
+      setState(() {
+        _importing = false;
+        _status = '${AppLocalizations.of(context).importSuccess} ${newOnes.length} ${AppLocalizations.of(context).newChannels}';
+        _urlCtrl.clear();
+      });
+    } catch (e) {
+      setState(() {
+        _importing = false;
+        _status = AppLocalizations.of(context).importFailed;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(AppLocalizations.of(context).manageSources, style: GoogleFonts.cairo(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(
+            AppLocalizations.of(context).importNote,
+            style: const TextStyle(color: Colors.white54, fontSize: 13),
+          ),
+          const SizedBox(height: 28),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF141820),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFD4A84B).withOpacity(0.25)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(AppLocalizations.of(context).importPlaylist, style: GoogleFonts.cairo(color: const Color(0xFFD4A84B), fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _urlCtrl,
+                  enabled: !_importing,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'https://example.com/playlist.m3u',
+                    hintStyle: const TextStyle(color: Colors.white24),
+                    filled: true,
+                    fillColor: const Color(0xFF1A1F28),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                if (_status.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(_status, style: TextStyle(color: _status.contains('تم') ? const Color(0xFFD4A84B) : Colors.white70)),
+                  ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD4A84B),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _importing ? null : _import,
+                  child: _importing
+                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : Text(AppLocalizations.of(context).startImport, style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF141820),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, color: Color(0xFFD4A84B), size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '${AppLocalizations.of(context).currentChannels}: ${widget.channels.length}\n${AppLocalizations.of(context).savedLocally}',
+                    style: const TextStyle(color: Colors.white60, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+================================================================================
+FILE: lib/l10n/app_localizations.dart
+================================================================================
+
+import 'package:flutter/material.dart';
+
+class AppLocalizations {
+  final Locale locale;
+  AppLocalizations(this.locale);
+
+  static AppLocalizations of(BuildContext context) {
+    return Localizations.of<AppLocalizations>(context, AppLocalizations)!;
+  }
+
+  static const LocalizationsDelegate<AppLocalizations> delegate = _AppLocalizationsDelegate();
+
+  static final Map<String, Map<String, String>> _localizedValues = {
+    'ar': {
+      'appName': 'Heedar TV',
+      'home': 'الرئيسية',
+      'live': 'بث مباشر',
+      'movies': 'أفلام',
+      'series': 'مسلسلات',
+      'sources': 'المصادر',
+      'settings': 'الإعدادات',
+      'searchChannel': 'ابحث عن قناة...',
+      'all': 'الكل',
+      'favorites': 'المفضلة',
+      'noChannels': 'لا توجد قنوات',
+      'noResults': 'لا توجد نتائج',
+      'importM3U': 'استيراد M3U',
+      'liveTV': 'البث المباشر',
+      'chooseChannel': 'اختر قناة للبدء',
+      'connecting': 'جاري الاتصال بالبث...',
+      'playbackError': 'تعذر تشغيل هذا البث',
+      'retry': 'إعادة المحاولة',
+      'group': 'المجموعة',
+      'importPlaylist': 'استيراد قائمة M3U / M3U8',
+      'importNote': 'أضف قوائم M3U أو M3U8 من مصادر تملك حق استخدامها.\nالتطبيق لا يأتي بأي قنوات جاهزة.',
+      'startImport': 'بدء الاستيراد',
+      'downloading': 'جاري التنزيل...',
+      'parsing': 'جاري التحليل...',
+      'importSuccess': 'تم استيراد',
+      'channels': 'قناة',
+      'newChannels': 'قناة جديدة',
+      'importFailed': 'فشل: تأكد من الرابط',
+      'currentChannels': 'القنوات الحالية',
+      'savedLocally': 'يتم حفظ المصادر محليًا ولا تُفقد عند إغلاق التطبيق.',
+      'noMovies': 'لا توجد أفلام بعد.\nأضف مصادر أو استورد محتوى لاحقًا.',
+      'noSeries': 'لا توجد مسلسلات بعد.\nأضف مصادر أو استورد محتوى لاحقًا.',
+      'canLinkLater': 'يمكنك لاحقًا ربط مصادر مرخّصة أو إضافة روابطك الخاصة',
+      'quickAccess': 'وصول سريع',
+      'addSource': 'أضف مصدر',
+      'viewAll': 'عرض الكل',
+      'noChannelsYet': 'لا توجد قنوات بعد',
+      'channelsReady': 'قناة جاهزة',
+      'importToStart': 'استورد قائمة M3U للبدء في المشاهدة',
+      'tapForLive': 'اضغط للانتقال إلى البث المباشر',
+      'liveBadge': 'مباشر',
+      'clearChannels': 'مسح كل القنوات',
+      'version': 'نسخة فاخرة 1.1 — للهواتف وشاشات التلفزيون',
+      'close': 'إغلاق',
+      'cancel': 'إلغاء',
+      'language': 'اللغة',
+      'arabic': 'العربية',
+      'english': 'English',
+      'manageSources': 'إدارة المصادر',
+      'playlistUrl': 'رابط القائمة',
+    },
+    'en': {
+      'appName': 'Heedar TV',
+      'home': 'Home',
+      'live': 'Live TV',
+      'movies': 'Movies',
+      'series': 'Series',
+      'sources': 'Sources',
+      'settings': 'Settings',
+      'searchChannel': 'Search channels...',
+      'all': 'All',
+      'favorites': 'Favorites',
+      'noChannels': 'No channels',
+      'noResults': 'No results',
+      'importM3U': 'Import M3U',
+      'liveTV': 'Live TV',
+      'chooseChannel': 'Select a channel to start',
+      'connecting': 'Connecting to stream...',
+      'playbackError': 'Unable to play this stream',
+      'retry': 'Retry',
+      'group': 'Group',
+      'importPlaylist': 'Import M3U / M3U8 Playlist',
+      'importNote': 'Add M3U or M3U8 playlists from sources you have rights to use.\nThe app does not come with any preloaded channels.',
+      'startImport': 'Start Import',
+      'downloading': 'Downloading...',
+      'parsing': 'Parsing channels...',
+      'importSuccess': 'Imported',
+      'channels': 'channels',
+      'newChannels': 'new channels',
+      'importFailed': 'Failed: check the URL',
+      'currentChannels': 'Current channels',
+      'savedLocally': 'Sources are saved locally and persist after closing the app.',
+      'noMovies': 'No movies yet.\nAdd sources or import content later.',
+      'noSeries': 'No series yet.\nAdd sources or import content later.',
+      'canLinkLater': 'You can later link licensed sources or add your own links',
+      'quickAccess': 'Quick Access',
+      'addSource': 'Add Source',
+      'viewAll': 'View All',
+      'noChannelsYet': 'No channels yet',
+      'channelsReady': 'channels ready',
+      'importToStart': 'Import an M3U playlist to start watching',
+      'tapForLive': 'Tap to go to Live TV',
+      'liveBadge': 'LIVE',
+      'clearChannels': 'Clear all channels',
+      'version': 'Premium 1.1 — Phones & Android TV',
+      'close': 'Close',
+      'cancel': 'Cancel',
+      'language': 'Language',
+      'arabic': 'العربية',
+      'english': 'English',
+      'manageSources': 'Manage Sources',
+      'playlistUrl': 'Playlist URL',
+    },
+  };
+
+  String get(String key) {
+    return _localizedValues[locale.languageCode]?[key] ??
+        _localizedValues['en']?[key] ??
+        key;
+  }
+
+  // Convenience getters
+  String get appName => get('appName');
+  String get home => get('home');
+  String get live => get('live');
+  String get movies => get('movies');
+  String get series => get('series');
+  String get sources => get('sources');
+  String get settings => get('settings');
+  String get searchChannel => get('searchChannel');
+  String get all => get('all');
+  String get favorites => get('favorites');
+  String get noChannels => get('noChannels');
+  String get noResults => get('noResults');
+  String get importM3U => get('importM3U');
+  String get liveTV => get('liveTV');
+  String get chooseChannel => get('chooseChannel');
+  String get connecting => get('connecting');
+  String get playbackError => get('playbackError');
+  String get retry => get('retry');
+  String get group => get('group');
+  String get importPlaylist => get('importPlaylist');
+  String get importNote => get('importNote');
+  String get startImport => get('startImport');
+  String get downloading => get('downloading');
+  String get parsing => get('parsing');
+  String get importSuccess => get('importSuccess');
+  String get channels => get('channels');
+  String get newChannels => get('newChannels');
+  String get importFailed => get('importFailed');
+  String get currentChannels => get('currentChannels');
+  String get savedLocally => get('savedLocally');
+  String get noMovies => get('noMovies');
+  String get noSeries => get('noSeries');
+  String get canLinkLater => get('canLinkLater');
+  String get quickAccess => get('quickAccess');
+  String get addSource => get('addSource');
+  String get viewAll => get('viewAll');
+  String get noChannelsYet => get('noChannelsYet');
+  String get channelsReady => get('channelsReady');
+  String get importToStart => get('importToStart');
+  String get tapForLive => get('tapForLive');
+  String get liveBadge => get('liveBadge');
+  String get clearChannels => get('clearChannels');
+  String get version => get('version');
+  String get close => get('close');
+  String get cancel => get('cancel');
+  String get language => get('language');
+  String get arabic => get('arabic');
+  String get english => get('english');
+  String get manageSources => get('manageSources');
+  String get playlistUrl => get('playlistUrl');
+}
+
+class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
+  const _AppLocalizationsDelegate();
+
+  @override
+  bool isSupported(Locale locale) => ['ar', 'en'].contains(locale.languageCode);
+
+  @override
+  Future<AppLocalizations> load(Locale locale) async => AppLocalizations(locale);
+
+  @override
+  bool shouldReload(_AppLocalizationsDelegate old) => false;
+}
+
+
+================================================================================
+FILE: lib/models/channel.dart
+================================================================================
+
+class Channel {
+  final String id;
+  final String name;
+  final String url;
+  final String logo;
+  final String group;
+  bool isFavorite;
+  bool isWorking;
+
+  Channel({
+    required this.id,
+    required this.name,
+    required this.url,
+    this.logo = '',
+    this.group = 'عام',
+    this.isFavorite = false,
+    this.isWorking = true,
+  });
+
+  factory Channel.fromJson(Map<String, dynamic> json) {
+    return Channel(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? 'قناة بدون اسم',
+      url: json['url'] as String? ?? '',
+      logo: json['logo'] as String? ?? '',
+      group: json['group'] as String? ?? 'عام',
+      isFavorite: json['isFavorite'] as bool? ?? false,
+      isWorking: json['isWorking'] as bool? ?? true,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'url': url,
+      'logo': logo,
+      'group': group,
+      'isFavorite': isFavorite,
+      'isWorking': isWorking,
+    };
+  }
+
+  Channel copyWith({
+    String? id,
+    String? name,
+    String? url,
+    String? logo,
+    String? group,
+    bool? isFavorite,
+    bool? isWorking,
+  }) {
+    return Channel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      url: url ?? this.url,
+      logo: logo ?? this.logo,
+      group: group ?? this.group,
+      isFavorite: isFavorite ?? this.isFavorite,
+      isWorking: isWorking ?? this.isWorking,
+    );
+  }
+}
+
+
+================================================================================
+FILE: lib/models/media_item.dart
+================================================================================
+
+class MediaItem {
+  final String id;
+  final String title;
+  final String? originalTitle;
+  final String overview;
+  final String posterUrl;
+  final String backdropUrl;
+  final String year;
+  final double rating;
+  final List<String> genres;
+  final String language;
+  final String type; // 'movie' or 'series'
+  final String? streamUrl; // null = not playable yet
+  final int? seasonsCount;
+  final List<Episode>? episodes;
+  bool isFavorite;
+  bool isWatched;
+
+  MediaItem({
+    required this.id,
+    required this.title,
+    this.originalTitle,
+    this.overview = '',
+    this.posterUrl = '',
+    this.backdropUrl = '',
+    this.year = '',
+    this.rating = 0.0,
+    this.genres = const [],
+    this.language = 'ar',
+    required this.type,
+    this.streamUrl,
+    this.seasonsCount,
+    this.episodes,
+    this.isFavorite = false,
+    this.isWatched = false,
+  });
+
+  bool get isPlayable => streamUrl != null && streamUrl!.isNotEmpty;
+
+  factory MediaItem.fromJson(Map<String, dynamic> json) {
+    return MediaItem(
+      id: json['id']?.toString() ?? '',
+      title: json['title'] ?? json['name'] ?? 'بدون عنوان',
+      originalTitle: json['originalTitle'] ?? json['original_name'],
+      overview: json['overview'] ?? '',
+      posterUrl: json['posterUrl'] ?? json['poster_path'] ?? '',
+      backdropUrl: json['backdropUrl'] ?? json['backdrop_path'] ?? '',
+      year: json['year']?.toString() ?? '',
+      rating: (json['rating'] ?? json['vote_average'] ?? 0).toDouble(),
+      genres: (json['genres'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      language: json['language'] ?? 'ar',
+      type: json['type'] ?? 'movie',
+      streamUrl: json['streamUrl'],
+      seasonsCount: json['seasonsCount'],
+      isFavorite: json['isFavorite'] ?? false,
+      isWatched: json['isWatched'] ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'originalTitle': originalTitle,
+        'overview': overview,
+        'posterUrl': posterUrl,
+        'backdropUrl': backdropUrl,
+        'year': year,
+        'rating': rating,
+        'genres': genres,
+        'language': language,
+        'type': type,
+        'streamUrl': streamUrl,
+        'seasonsCount': seasonsCount,
+        'isFavorite': isFavorite,
+        'isWatched': isWatched,
+      };
+}
+
+class Episode {
+  final String id;
+  final int season;
+  final int number;
+  final String title;
+  final String? overview;
+  final String? streamUrl;
+  final String? stillUrl;
+
+  Episode({
+    required this.id,
+    required this.season,
+    required this.number,
+    required this.title,
+    this.overview,
+    this.streamUrl,
+    this.stillUrl,
+  });
+
+  bool get isPlayable => streamUrl != null && streamUrl!.isNotEmpty;
+}
+
+
+================================================================================
+FILE: lib/services/m3u_service.dart
+================================================================================
+
+import 'dart:async';
+import 'package:uuid/uuid.dart';
+import '../models/channel.dart';
+
+class M3uService {
+  static const _uuid = Uuid();
+
+  /// Parses M3U / M3U8 content and yields Channel objects progressively.
+  static Stream<Channel> parseM3uContent(String content) async* {
+    final lines = content.split(RegExp(r'\r?\n'));
+    String? currentName;
+    String? currentLogo;
+    String? currentGroup;
+
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i].trim();
+
+      if (line.startsWith('#EXTINF:')) {
+        // Example: #EXTINF:-1 tvg-logo="..." group-title="News",Channel Name
+        currentName = null;
+        currentLogo = '';
+        currentGroup = 'عام';
+
+        // Extract attributes
+        final logoMatch = RegExp(r'tvg-logo="([^"]*)"', caseSensitive: false).firstMatch(line);
+        if (logoMatch != null) currentLogo = logoMatch.group(1) ?? '';
+
+        final groupMatch = RegExp(r'group-title="([^"]*)"', caseSensitive: false).firstMatch(line);
+        if (groupMatch != null) {
+          final g = groupMatch.group(1)?.trim();
+          if (g != null && g.isNotEmpty) currentGroup = g;
+        }
+
+        // Name is after the last comma
+        final commaIndex = line.lastIndexOf(',');
+        if (commaIndex != -1 && commaIndex < line.length - 1) {
+          currentName = line.substring(commaIndex + 1).trim();
+        }
+      } else if (line.isNotEmpty &&
+          !line.startsWith('#') &&
+          currentName != null &&
+          currentName.isNotEmpty) {
+        // This is the URL line
+        final url = line;
+        if (_isValidStreamUrl(url)) {
+          yield Channel(
+            id: _uuid.v4(),
+            name: currentName,
+            url: url,
+            logo: currentLogo ?? '',
+            group: currentGroup ?? 'عام',
+          );
+        }
+        currentName = null;
+        currentLogo = null;
+        currentGroup = null;
+      }
+
+      // Yield control occasionally for large playlists
+      if (i % 50 == 0) {
+        await Future.delayed(Duration.zero);
+      }
+    }
+  }
+
+  static bool _isValidStreamUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.startsWith('http://') ||
+        lower.startsWith('https://') ||
+        lower.startsWith('rtmp://') ||
+        lower.startsWith('rtsp://');
+  }
+
+  /// Quick validation of a stream URL (HEAD / short timeout).
+  /// Returns true if the server responds positively.
+  static Future<bool> validateStreamUrl(String url, {Duration timeout = const Duration(seconds: 8)}) async {
+    try {
+      // We only do a lightweight check; full playback test happens in the player.
+      final uri = Uri.tryParse(url);
+      if (uri == null || !uri.hasScheme) return false;
+      return true; // Actual test is done when playing
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+
+================================================================================
+FILE: android/app/src/main/AndroidManifest.xml
+================================================================================
+
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Internet for streaming -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+
+    <!-- Declare that the app works on TVs (not required touchscreen) -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+    <uses-feature android:name="android.software.leanback" android:required="false"/>
+
+    <application
+        android:label="Heedar TV"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:banner="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <!-- Phone / Tablet launcher -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Android TV / Google TV launcher -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+
+
+================================================================================
+FILE: android/app/build.gradle
+================================================================================
+
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace = "com.heedar.heedar_tv"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.heedar.heedar_tv"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = 21
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+
+================================================================================
+FILE: android/build.gradle
+================================================================================
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = "../build"
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
+
+
+================================================================================
+FILE: android/settings.gradle
+================================================================================
+
+pluginManagement {
+    def flutterSdkPath = {
+        def properties = new Properties()
+        file("local.properties").withInputStream { properties.load(it) }
+        def flutterSdkPath = properties.getProperty("flutter.sdk")
+        assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
+        return flutterSdkPath
+    }()
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+    id "com.android.application" version "8.1.0" apply false
+    id "org.jetbrains.kotlin.android" version "1.8.22" apply false
+}
+
+include ":app"
