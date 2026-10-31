@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Launch-window background. Matches DarkBackground (#040E0B) so cold start is seamless. -->
-    <color name="owntv_window_bg">#040e0b</color>
+    <!-- Heedartv emerald-black launch background. -->
+    <color name="owntv_window_bg">#04110D</color>
     <!-- Adaptive launcher icon background. -->
-    <color name="owntv_icon_bg">#050914</color>
+    <color name="owntv_icon_bg">#062016</color>
 </resources>
